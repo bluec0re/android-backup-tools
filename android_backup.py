@@ -165,6 +165,18 @@ class AndroidBackup:
         with open(pickle_fname, 'wb') as fp:
             pickle.dump(members, fp)
 
+    def list(self):
+        data = self.fp.read()
+
+        if self.encryption == EncryptionType.AES256:
+            data = self._decrypt(data)
+
+        if self.compression == CompressionType.ZLIB:
+            data = zlib.decompress(data, zlib.MAX_WBITS)
+
+        tar = tarfile.TarFile(fileobj=io.BytesIO(data))
+        tar.list()
+
     def pack(self, fname):
         target_dir = os.path.basename(fname) + '_unpacked'
         pickle_fname = os.path.basename(fname) + '.pickle'

@@ -5,6 +5,7 @@ from android_backup import AndroidBackup
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument('-l', '--list', action='store_true')
     parser.add_argument('IN', type=AndroidBackup)
 
     args = parser.parse_args()
@@ -13,4 +14,7 @@ if __name__ == "__main__":
 
     infile.parse()
 
-    infile.unpack()
+    if args.list:
+        infile.list()
+    else:
+        infile.unpack()
