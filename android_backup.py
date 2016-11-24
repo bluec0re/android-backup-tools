@@ -27,6 +27,33 @@ class EncryptionType(enum.Enum):
     AES256 = 'AES-256'
 
 
+class Proxy:
+    def __init__(self, transformer, source, chunk_size=4096):
+        self.transformer = transformer
+        self.source = source
+        self.pos = 0
+        self._buffer = bytearray()
+        self.chunk_size = chunk_size
+
+    def read(self, n=0):
+        data = self._buffer
+        for chunk in iter(lambda: self.source.read(self.chunk_size), b''):
+            res = self.transformer(chunk)
+            if not res:
+                break
+            data.extend(res)
+            if n and len(data) >= n:
+                break
+        if len(data) > n:
+            self._buffer = data[n:]
+            data = data[:n]
+        self.pos += len(data)
+        return data
+
+    def tell(self):
+        return self.pos
+
+
 class AndroidBackup:
     def __init__(self, fname=None):
         if fname:
@@ -46,19 +73,19 @@ class AndroidBackup:
         self.compression = CompressionType(int(self.fp.readline().strip()))
         self.encryption = EncryptionType(self.fp.readline().strip().decode())
 
-    def _decrypt(self, enc):
+    def _decrypt(self, fp):
         if AES is None:
             raise ImportError("PyCrypto required")
 
-        user_salt, enc = enc.split(b'\n', 1)
+        user_salt = fp.readline().strip()
         user_salt = binascii.a2b_hex(user_salt)
-        ck_salt, enc = enc.split(b'\n', 1)
+        ck_salt = fp.readline().strip()
         ck_salt = binascii.a2b_hex(ck_salt)
-        rounds, enc = enc.split(b'\n', 1)
+        rounds = fp.readline().strip()
         rounds = int(rounds)
-        iv, enc = enc.split(b'\n', 1)
+        iv = fp.readline().strip()
         iv = binascii.a2b_hex(iv)
-        master_key, enc = enc.split(b'\n', 1)
+        master_key = fp.readline().strip()
         master_key = binascii.a2b_hex(master_key)
 
         user_key = PBKDF2(getpass.getpass("Password:"), user_salt, dkLen=256//8, count=rounds)
@@ -87,10 +114,26 @@ class AndroidBackup:
                          mode=AES.MODE_CBC,
                          IV=master_iv)
 
-        dec = cipher.decrypt(enc)
-        pad = dec[-1]
+        off = fp.tell()
+        fp.seek(0, 2)
+        length = fp.tell() - off
+        fp.seek(off)
 
-        return dec[:-pad]
+        def decrypt(data):
+            data = cipher.decrypt(data)
+
+            if fp.tell() - off >= length:
+                pad = data[-1]
+                assert data.endswith(bytes([pad] * pad))
+                data = data[:-pad]
+
+            return data
+
+        return Proxy(decrypt, fp, cipher.block_size)
+        #dec = cipher.decrypt(enc)
+        #pad = dec[-1]
+
+        #return dec[:-pad]
 
     @staticmethod
     def encode_utf8(mk):
@@ -142,16 +185,21 @@ class AndroidBackup:
 
         return enc
 
+    def _decompress(self, fp):
+        decompressor = zlib.decompressobj(zlib.MAX_WBITS)
+
+        return Proxy(decompressor.decompress, fp)
+
     def unpack(self):
-        data = self.fp.read()
+        fp = self.fp.read()
 
         if self.encryption == EncryptionType.AES256:
-            data = self._decrypt(data)
+            fp = self._decrypt(fp)
 
         if self.compression == CompressionType.ZLIB:
-            data = zlib.decompress(data, zlib.MAX_WBITS)
+            fp = self._decompress(fp)
 
-        tar = tarfile.TarFile(fileobj=io.BytesIO(data))
+        tar = tarfile.open(fileobj=fp, mode='r|*')
 
         members = tar.getmembers()
 
@@ -166,15 +214,15 @@ class AndroidBackup:
             pickle.dump(members, fp)
 
     def list(self):
-        data = self.fp.read()
+        fp = self.fp
 
         if self.encryption == EncryptionType.AES256:
-            data = self._decrypt(data)
+            fp = self._decrypt(fp)
 
         if self.compression == CompressionType.ZLIB:
-            data = zlib.decompress(data, zlib.MAX_WBITS)
+            fp = self._decompress(fp)
 
-        tar = tarfile.TarFile(fileobj=io.BytesIO(data))
+        tar = tarfile.open(fileobj=fp, mode='r|*')
         tar.list()
 
     def pack(self, fname):
