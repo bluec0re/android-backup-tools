@@ -4,7 +4,7 @@ import argparse
 import getpass
 import android_backup
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('OUT')
     parser.add_argument('-p', '--password')
@@ -21,3 +21,6 @@ if __name__ == "__main__":
     if args.encrypt:
         ab.encryption = android_backup.EncryptionType.AES256
     ab.pack(args.OUT, password)
+
+if __name__ == "__main__":
+    main()

@@ -4,7 +4,7 @@ import argparse
 import getpass
 from android_backup import AndroidBackup
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-l', '--list', action='store_true')
     parser.add_argument('-p', '--password')
@@ -24,3 +24,6 @@ if __name__ == "__main__":
         print(infile.list(password))
     else:
         infile.unpack(password=password)
+
+if __name__ == "__main__":
+    main()

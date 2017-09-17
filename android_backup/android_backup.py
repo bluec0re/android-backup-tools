@@ -146,10 +146,11 @@ class AndroidBackup:
 
     def read_data(self, password):
         """Reads from the file and returns a TarFile object."""
-        self.fp.seek(0)  # make sure we are at the beginning
         data = self.fp.read()
 
         if self.encryption == EncryptionType.AES256:
+            if password is None:
+                raise Exception("Password need to be provided to extract encrypted archives")
             data = self._decrypt(data, password)
 
         if self.compression == CompressionType.ZLIB:
@@ -159,7 +160,7 @@ class AndroidBackup:
         return tar
 
     def unpack(self, target_dir=None, password=None):
-        tar = self._read_data(password)
+        tar = self.read_data(password)
 
         members = tar.getmembers()
 
@@ -175,7 +176,7 @@ class AndroidBackup:
             pickle.dump(members, fp)
 
     def list(self, password=None):
-        tar = self._read_tar(password)
+        tar = self.read_tar(password)
         return tar.list()
 
     def pack(self, fname, password=None):
@@ -218,4 +219,5 @@ class AndroidBackup:
         self.close()
 
     def __enter__(self):
+        self.parse()
         return self
