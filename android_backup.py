@@ -6,7 +6,6 @@ import enum
 import io
 import pickle
 import os
-import getpass
 import binascii
 
 try:
@@ -46,7 +45,10 @@ class AndroidBackup:
         self.compression = CompressionType(int(self.fp.readline().strip()))
         self.encryption = EncryptionType(self.fp.readline().strip().decode())
 
-    def _decrypt(self, enc):
+    def is_encrypted(self):
+        return self.encryption == EncryptionType.AES256
+
+    def _decrypt(self, enc, password):
         if AES is None:
             raise ImportError("PyCrypto required")
 
@@ -61,7 +63,7 @@ class AndroidBackup:
         master_key, enc = enc.split(b'\n', 1)
         master_key = binascii.a2b_hex(master_key)
 
-        user_key = PBKDF2(getpass.getpass("Password:"), user_salt, dkLen=256//8, count=rounds)
+        user_key = PBKDF2(password, user_salt, dkLen=256//8, count=rounds)
         cipher = AES.new(user_key,
                          mode=AES.MODE_CBC,
                          IV=iv)
@@ -104,7 +106,7 @@ class AndroidBackup:
                 utf8mk[i] = chr(c)
         return ''.join(utf8mk).encode('utf-8')
 
-    def _encrypt(self, dec):
+    def _encrypt(self, dec, password):
         if AES is None:
             raise ImportError("PyCrypto required")
 
@@ -124,7 +126,7 @@ class AndroidBackup:
         master_ck = PBKDF2(self.encode_utf8(master_key),
                            master_salt, dkLen=256//8, count=rounds)
 
-        user_key = PBKDF2(getpass.getpass("Password:"),
+        user_key = PBKDF2(password,
                           user_salt, dkLen=256//8, count=rounds)
 
         master_dec = b"\x10" + master_iv + b"\x20" + master_key + b"\x20" + master_ck
@@ -142,20 +144,27 @@ class AndroidBackup:
 
         return enc
 
-    def unpack(self):
+    def read_data(self, password):
+        """Reads from the file and returns a TarFile object."""
+        self.fp.seek(0)  # make sure we are at the beginning
         data = self.fp.read()
 
         if self.encryption == EncryptionType.AES256:
-            data = self._decrypt(data)
+            data = self._decrypt(data, password)
 
         if self.compression == CompressionType.ZLIB:
             data = zlib.decompress(data, zlib.MAX_WBITS)
 
         tar = tarfile.TarFile(fileobj=io.BytesIO(data))
+        return tar
+
+    def unpack(self, target_dir=None, password=None):
+        tar = self._read_data(password)
 
         members = tar.getmembers()
 
-        target_dir = os.path.basename(self.fp.name) + '_unpacked'
+        if target_dir is None:
+            target_dir = os.path.basename(self.fp.name) + '_unpacked'
         pickle_fname = os.path.basename(self.fp.name) + '.pickle'
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
@@ -165,19 +174,11 @@ class AndroidBackup:
         with open(pickle_fname, 'wb') as fp:
             pickle.dump(members, fp)
 
-    def list(self):
-        data = self.fp.read()
+    def list(self, password=None):
+        tar = self._read_tar(password)
+        return tar.list()
 
-        if self.encryption == EncryptionType.AES256:
-            data = self._decrypt(data)
-
-        if self.compression == CompressionType.ZLIB:
-            data = zlib.decompress(data, zlib.MAX_WBITS)
-
-        tar = tarfile.TarFile(fileobj=io.BytesIO(data))
-        tar.list()
-
-    def pack(self, fname):
+    def pack(self, fname, password=None):
         target_dir = os.path.basename(fname) + '_unpacked'
         pickle_fname = os.path.basename(fname) + '.pickle'
 
@@ -203,7 +204,7 @@ class AndroidBackup:
         if self.compression == CompressionType.ZLIB:
             data = zlib.compress(data.read())
         if self.encryption == EncryptionType.AES256:
-            data = self._encrypt(data)
+            data = self._encrypt(data, password)
 
         with open(fname, 'wb') as fp:
             fp.write(b'ANDROID BACKUP\n')
