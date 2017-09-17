@@ -22,6 +22,8 @@ setup(
         'Programming Language :: Python :: 3',
     ],
 
+    packages=['android_backup'],
+
     keywords='android backup pack unpack development',
 
     entry_points={
