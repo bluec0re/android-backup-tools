@@ -75,11 +75,18 @@ class AndroidBackup:
     >>> with AndroidBackup('backup.ab') as ab:
     >>>   ab.list()
     """
-    def __init__(self, fname=None, password=None):
+    def __init__(self, fname=None, password=None, stream=True):
+        """
+        :param fname: The filename of the backup file or a file-like object
+        :param password: The password to use for the en-/decryption
+        :param stream: Open the backup file in stream mode. Reduces memory usage
+                       but allows only sequential reads. Default: True 
+        """
         self.fp = None
         self.version = None
         self.compression = None
         self.encryption = None
+        self.stream = stream
         self.password = password
         # position of the actual file data (after the header)
         self.__data_start = 0
@@ -201,19 +208,26 @@ class AndroidBackup:
         length = fp.tell() - off
         fp.seek(off)
 
-        # decryption transformer for Proxy class
-        def decrypt(data):
-            data = cipher.decrypt(data)
+        if self.stream:
+            # decryption transformer for Proxy class
+            def decrypt(data):
+                data = cipher.decrypt(data)
 
-            if fp.tell() - off >= length:
-                # check padding (PKCS#7)
-                pad = data[-1]
-                assert data.endswith(bytes([pad] * pad))
-                data = data[:-pad]
+                if fp.tell() - off >= length:
+                    # check padding (PKCS#7)
+                    pad = data[-1]
+                    assert data.endswith(bytes([pad] * pad))
+                    data = data[:-pad]
 
-            return data
+                return data
 
-        return Proxy(decrypt, fp, cipher.block_size)
+            return Proxy(decrypt, fp, cipher.block_size)
+        else:
+            data = cipher.decrypt(fp.read())
+            pad = data[-1]
+            assert data.endswith(bytes([pad] * pad))
+            data = data[:-pad]
+            return io.BytesIO(data)
 
     @staticmethod
     def encode_utf8(mk):
@@ -301,8 +315,13 @@ class AndroidBackup:
         :rtype: Proxy
         """
         decompressor = zlib.decompressobj()
-
-        return Proxy(decompressor.decompress, fp)
+        if self.stream:
+            return Proxy(decompressor.decompress, fp)
+        else:
+            out = io.BytesIO(decompressor.decompress(fp.read()))
+            out.write(decompressor.flush())
+            out.seek(0)
+            return out
 
     def read_data(self, password=None):
         """
@@ -318,10 +337,14 @@ class AndroidBackup:
         if self.compression == CompressionType.ZLIB:
             fp = self._decompress(fp)
 
-        tar = tarfile.open(fileobj=fp, mode='r|*')
+        if self.stream:
+            mode = 'r|*'
+        else:
+            mode = 'r:*'
+        tar = tarfile.open(fileobj=fp, mode=mode)
         return tar
 
-    def unpack(self, target_dir=None, password=None):
+    def unpack(self, target_dir=None, password=None, pickle_fname=None):
         """
         High level function for unpacking a backup file into the given
         target directory (will be generated based on the filename if not given).
@@ -337,7 +360,8 @@ class AndroidBackup:
 
         if target_dir is None:
            target_dir = os.path.basename(self.fp.name) + '_unpacked'
-        pickle_fname = os.path.basename(self.fp.name) + '.pickle'
+        if pickle_fname is None:
+            pickle_fname = os.path.basename(fname) + '.pickle'
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
 
@@ -366,7 +390,7 @@ class AndroidBackup:
         tar = self.read_data(password)
         return tar.getmembers()
 
-    def pack(self, fname, source_dir=None, password=None):
+    def pack(self, fname, source_dir=None, password=None, pickle_fname=None):
         """
         High level function for repacking a backup file from the given
         target directory (will be generated based on the filename if not given).
@@ -384,7 +408,8 @@ class AndroidBackup:
         """
         if source_dir is None:
             source_dir = os.path.basename(fname) + '_unpacked'
-        pickle_fname = os.path.basename(fname) + '.pickle'
+        if pickle_fname is None:
+            pickle_fname = os.path.basename(fname) + '.pickle'
 
         assert self.version is not None, "Backup version is not set"
         assert self.compression is not None, "Compression level is not set"

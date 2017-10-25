@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='android_backup',
-    version='0.0.1',
+    version='0.1.0',
     description='Unpack and repack android backups',
     url='https://github.com/bluec0re/android-backup-tools',
     author='BlueC0re',
