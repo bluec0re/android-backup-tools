@@ -361,7 +361,7 @@ class AndroidBackup:
         if target_dir is None:
            target_dir = os.path.basename(self.fp.name) + '_unpacked'
         if pickle_fname is None:
-            pickle_fname = os.path.basename(fname) + '.pickle'
+            pickle_fname = os.path.basename(self.fp.name) + '.pickle'
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
 
