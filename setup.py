@@ -7,7 +7,7 @@ if sys.version_info[:2] < (3,4):
 
 setup(
     name='android_backup',
-    version='0.1.0',
+    version='0.2.0',
     description='Unpack and repack android backups',
     url='https://github.com/bluec0re/android-backup-tools',
     author='BlueC0re',
