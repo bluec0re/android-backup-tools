@@ -16,6 +16,9 @@ class UnpackTest(unittest.TestCase):
     #     t = time.time() - self.startTime
     #     print("%s: %.3f" % (self.id(), t))
 
+    if not hasattr(unittest.TestCase, 'assertRaisesRegex'):
+        assertRaisesRegex = unittest.TestCase.assertRaisesRegexp
+
     def test_compressed_stream(self):
         with AndroidBackup(io.BytesIO(TEST_DATA_NONENC)) as ab:
             self.assertEqual(ab.version, 3)
