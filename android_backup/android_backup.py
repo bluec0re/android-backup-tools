@@ -82,6 +82,7 @@ class AndroidBackup:
         :param stream: Open the backup file in stream mode. Reduces memory usage
                        but allows only sequential reads. Default: True 
         """
+        self.fname = 'unknown'
         self.fp = None
         self.version = None
         self.compression = None
@@ -93,8 +94,11 @@ class AndroidBackup:
 
         if isinstance(fname, str):
             self.open(fname)
+            self.fname = fname
         else:
             self.fp = fname
+            if hasattr(self.fp, 'name'):
+                self.fname = self.fp.name
 
     def open(self, fname, mode='rb'):
         """
@@ -102,6 +106,7 @@ class AndroidBackup:
         """
         self.close()
         self.fp = open(fname, mode)
+        self.fname = fname
 
     def close(self):
         """
@@ -359,9 +364,9 @@ class AndroidBackup:
         """
 
         if target_dir is None:
-           target_dir = os.path.basename(self.fp.name) + '_unpacked'
+           target_dir = os.path.basename(self.fname) + '_unpacked'
         if pickle_fname is None:
-            pickle_fname = os.path.basename(fname) + '.pickle'
+            pickle_fname = os.path.basename(self.fname) + '.pickle'
         if not os.path.exists(target_dir):
             os.mkdir(target_dir)
 
