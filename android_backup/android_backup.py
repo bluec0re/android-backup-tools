@@ -9,6 +9,7 @@ import pickle
 import os
 import getpass
 import binascii
+import sys
 
 try:
     from Crypto.Cipher import AES
@@ -60,7 +61,7 @@ class Proxy:
             self._buffer = bytearray()
 
         self.pos += len(data)
-        return data
+        return bytes(data)
 
     def tell(self):
         return self.pos
@@ -184,7 +185,7 @@ class AndroidBackup:
         cipher = AES.new(user_key,
                          mode=AES.MODE_CBC,
                          IV=iv)
-        master_key = list(cipher.decrypt(master_key))
+        master_key = bytearray(cipher.decrypt(master_key))
         # format: <len IV: 1 byte><IV: n bytes><len key: 1 byte><key: m bytes><len checksum: 1 byte><checksum: k bytes>
         # get IV
         l = master_key.pop(0)
@@ -216,21 +217,21 @@ class AndroidBackup:
         if self.stream:
             # decryption transformer for Proxy class
             def decrypt(data):
-                data = cipher.decrypt(data)
+                data = bytearray(cipher.decrypt(data))
 
                 if fp.tell() - off >= length:
                     # check padding (PKCS#7)
                     pad = data[-1]
-                    assert data.endswith(bytes([pad] * pad))
+                    assert data.endswith(bytearray([pad] * pad)), "Expected {!r} got {!r}".format(bytearray([pad] * pad), data[-pad:])
                     data = data[:-pad]
 
                 return data
 
             return Proxy(decrypt, fp, cipher.block_size)
         else:
-            data = cipher.decrypt(fp.read())
+            data = bytearray(cipher.decrypt(fp.read()))
             pad = data[-1]
-            assert data.endswith(bytes([pad] * pad))
+            assert data.endswith(bytearray([pad] * pad)), "Expected {!r} got {!r}".format(bytearray([pad] * pad), data[-pad:])
             data = data[:-pad]
             return io.BytesIO(data)
 
@@ -243,12 +244,15 @@ class AndroidBackup:
         """
         utf8mk = mk.decode('raw_unicode_escape')
         utf8mk = list(utf8mk)
+        to_char = chr
+        if sys.version_info[0] < 3:
+            to_char = unichr
         for i in range(len(utf8mk)):
             c = ord(utf8mk[i])
             # fix java encoding (add 0xFF00 to non ascii chars)
             if 0x7f < c < 0x100:
                 c += 0xff00
-                utf8mk[i] = chr(c)
+                utf8mk[i] = to_char(c)
         return ''.join(utf8mk).encode('utf-8')
 
     def _encrypt(self, dec, password=None):

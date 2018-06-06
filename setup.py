@@ -1,4 +1,9 @@
 from setuptools import setup
+import sys
+
+deps = []
+if sys.version_info[:2] < (3,4):
+    deps.append('enum34')
 
 setup(
     name='android_backup',
@@ -26,4 +31,5 @@ setup(
             'android-backup-pack=android_backup.pack:main',
         ],
     },
+    install_requires=deps,
 )
