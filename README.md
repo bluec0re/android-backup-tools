@@ -1,23 +1,53 @@
 # android-backup-tools
+
+![Build status](https://travis-ci.org/bluec0re/android-backup-tools.svg?branch=master)
+
 Unpack and repack android backups
 
 
-Install
--------
+## Install
+
 ```
 $ pip install android_backup
 ```
 
-Usage
------
+Optional (for encrypted archives):
+```
+$ pip install pycrypto
+```
 
-Unpacking: ./android_backup/unpack.py foo.ab
+## Usage
 
-Results in directory foo.ab_unpacked
+### CLI
 
-Packing: ./android_backup/pack.py foo.ab
+#### Unpacking
+```
+$ android-backup-unpack foo.ab
+```
 
-Packs foo.ab_unpacked folder to foo.ab_unpacked/foo.ab
+Results in directory *foo.ab_unpacked*
 
-Or when installed with: android-backup-{unpack,pack} as above
+#### Packing
+```
+$ android-backup-pack foo.ab
+```
 
+Packs *foo.ab_unpacked* folder to *foo.ab*. Requires a previously generated *foo.ab.pickle* file.
+
+### Programmatic
+
+```python
+from android_backup import AndroidBackup, CompressionType, EncryptionType
+
+with AndroidBackup('foo.ab') as ab:
+  ab.list() # print content to stdout
+  
+with AndroidBackup('foo.ab') as ab:
+  ab.unpack()
+
+ab = AndroidBackup()
+ab.version = 3
+ab.compression = CompressionType.ZLIB
+ab.encryption = EncryptionType.NONE
+ab.pack('foo.ab')
+```
